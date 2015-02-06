@@ -38,3 +38,6 @@ Additional UI                   |   | ✓
 Bootstrapped extension          | ✓ |
 45 SLOC                         | ✓ |
 26,019 SLOC                     |   | ✓
+
+
+  [descript.xpi]: https://github.com/charmander/descript/releases
