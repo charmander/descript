@@ -36,7 +36,7 @@ HTTPS rewriting                 |   | ✓
 Automatic reloading             |   | ✓
 Additional UI                   |   | ✓
 Bootstrapped extension          | ✓ |
-45 SLOC                         | ✓ |
+40 SLOC                         | ✓ |
 26,019 SLOC                     |   | ✓
 
 

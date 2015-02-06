@@ -30,20 +30,13 @@ function startup() {
 		.getDefaultBranch('extensions.descript.')
 		.setCharPref('whitelist', '');
 
-	const ssm = Services.scriptSecurityManager;
-
-	if (ssm.domainPolicyActive) {
-		Components.utils.reportError('Domain policy already active.');
-		return;
-	}
+	domainPolicy = Services.scriptSecurityManager.activateDomainPolicy();
 
 	scriptsInitiallyEnabled = scriptPreferences.getBoolPref('enabled');
 	scriptPreferences.setBoolPref('enabled', false);
 
-	domainPolicy = ssm.activateDomainPolicy();
-	reloadWhitelist();
-
 	extensionPreferences.addObserver('whitelist', reloadWhitelist, false);
+	reloadWhitelist();
 }
 
 function shutdown() {
@@ -52,8 +45,8 @@ function shutdown() {
 	}
 
 	extensionPreferences.removeObserver('whitelist', reloadWhitelist);
-	domainPolicy.deactivate();
 	scriptPreferences.setBoolPref('enabled', scriptsInitiallyEnabled);
+	domainPolicy.deactivate();
 }
 
 function install() {
