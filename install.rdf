@@ -16,6 +16,6 @@
 		<em:bootstrap>true</em:bootstrap>
 		<em:description>A script blocker.</em:description>
 		<em:creator>Charmander</em:creator>
-		<em:homepageURL>https://charmander.me/descript/</em:homepageURL>
+		<em:homepageURL>https://github.com/charmander/descript</em:homepageURL>
 	</RDF:Description>
 </RDF:RDF>
