@@ -6,71 +6,62 @@
 Components.utils.import('resource://gre/modules/Services.jsm');
 Components.utils.import('resource://gre/modules/XPCOMUtils.jsm');
 
+function hostOnlyFor(uri) {
+	const hostOnly = uri.clone();
+	hostOnly.path = '';
+	hostOnly.port = -1;
+	hostOnly.ref = '';
+	hostOnly.userPass = '';
+
+	return hostOnly;
+}
+
 let domainPolicy;
 
 const whitelist = (function () {
-	const schemes = new Map([
-		['https', new Set()],
-		['http', new Set()],
-		['file', new Set()],
-	]);
+	let preference = [];
 
 	function matchable(uri) {
-		return schemes.has(uri.scheme);
+		return uri.schemeIs('https') ||
+			uri.schemeIs('http') ||
+			uri.schemeIs('file');
 	}
 
 	function allows(uri) {
-		const hosts = schemes.get(uri.scheme);
-
-		return !hosts || hosts.has(uri.host);
+		return !matchable(uri) || domainPolicy.whitelist.contains(uri);
 	}
 
 	function add(uri) {
-		const hosts = schemes.get(uri.scheme);
-
-		if (hosts) {
-			hosts.add(uri.host);
+		if (matchable(uri)) {
 			domainPolicy.whitelist.add(uri);
+			preference.push(hostOnlyFor(uri).spec);
 		}
 	}
 
 	function remove(uri) {
-		const hosts = schemes.get(uri.scheme);
+		domainPolicy.whitelist.remove(uri);
 
-		if (hosts) {
-			hosts.delete(uri.host);
-			domainPolicy.whitelist.remove(uri);
-		}
+		const hostSpec = hostOnlyFor(uri).spec;
+		preference = preference.filter(spec => spec !== hostSpec);
 	}
 
-	function loadPreference(preference) {
-		const uris = preference.match(/\S+/g);
+	function loadPreference(preferenceString) {
+		const newPreference = preferenceString.match(/\S+/g) || [];
 
-		for (let hosts of schemes.values()) {
-			hosts.clear();
-		}
-
+		preference = [];
 		domainPolicy.whitelist.clear();
 
-		if (!uris) {
+		if (!newPreference) {
 			return;
 		}
 
-		for (let uri of uris) {
-			add(Services.io.newURI(uri, null, null));
+		for (let spec of newPreference) {
+			add(Services.io.newURI(spec, null, null));
 		}
 	}
 
 	function getPreference() {
-		const result = [];
-
-		for (let [scheme, hosts] of schemes) {
-			for (let host of hosts) {
-				result.push(`${scheme}://${host}/`);
-			}
-		}
-
-		return result.join(' ');
+		return preference.join(' ');
 	}
 
 	return { matchable, allows, add, remove, loadPreference, getPreference };
@@ -93,16 +84,6 @@ const { startup, shutdown } = (function () {
 	const extensionPreferences = Services.prefs.getBranch('extensions.descript.');
 
 	let scriptsInitiallyEnabled;
-
-	function hostOnlyFor(uri) {
-		const hostOnly = uri.clone();
-		hostOnly.path = '';
-		hostOnly.port = -1;
-		hostOnly.ref = '';
-		hostOnly.userPass = '';
-
-		return hostOnly;
-	}
 
 	function addButton(window) {
 		if (!window.CustomizableUI) {
