@@ -17,7 +17,6 @@ Frame blocking                  |   | ✓
 Smart `<noscript>`              |   | ✓
 JavaScript link fixing          |   | ✓
 `<meta>` redirect blocking      |   | ✓
-HTTPS-only whitelist            |   | ✓
 Automatic cookie `Secure` flag  |   | ✓
 HTTPS rewriting                 |   | ✓
 Automatic reloading             |   | ✓

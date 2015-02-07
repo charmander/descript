@@ -6,47 +6,51 @@
 Components.utils.import('resource://gre/modules/Services.jsm');
 Components.utils.import('resource://gre/modules/XPCOMUtils.jsm');
 
+let domainPolicy;
+
 const whitelist = (function () {
-	const httpsHosts = new Set();
-	const httpHosts = new Set();
+	const schemes = new Map([
+		['https', new Set()],
+		['http', new Set()],
+		['file', new Set()],
+	]);
 
 	function matchable(uri) {
-		return uri.schemeIs('https') || uri.schemeIs('http');
+		return schemes.has(uri.scheme);
 	}
 
 	function allows(uri) {
-		if (uri.schemeIs('https')) {
-			return httpsHosts.has(uri.host);
-		}
+		const hosts = schemes.get(uri.scheme);
 
-		if (uri.schemeIs('http')) {
-			return httpHosts.has(uri.host);
-		}
-
-		return true;
+		return !hosts || hosts.has(uri.host);
 	}
 
 	function add(uri) {
-		if (uri.schemeIs('https')) {
-			httpsHosts.add(uri.host);
-		} else if (uri.schemeIs('http')) {
-			httpHosts.add(uri.host);
+		const hosts = schemes.get(uri.scheme);
+
+		if (hosts) {
+			hosts.add(uri.host);
+			domainPolicy.whitelist.add(uri);
 		}
 	}
 
 	function remove(uri) {
-		if (uri.schemeIs('https')) {
-			httpsHosts.delete(uri.host);
-		} else if (uri.schemeIs('http')) {
-			httpHosts.delete(uri.host);
+		const hosts = schemes.get(uri.scheme);
+
+		if (hosts) {
+			hosts.delete(uri.host);
+			domainPolicy.whitelist.remove(uri);
 		}
 	}
 
 	function loadPreference(preference) {
 		const uris = preference.match(/\S+/g);
 
-		httpsHosts.clear();
-		httpHosts.clear();
+		for (let hosts of schemes.values()) {
+			hosts.clear();
+		}
+
+		domainPolicy.whitelist.clear();
 
 		if (!uris) {
 			return;
@@ -60,12 +64,10 @@ const whitelist = (function () {
 	function getPreference() {
 		const result = [];
 
-		for (let host of httpsHosts) {
-			result.push(`https://${host}/`);
-		}
-
-		for (let host of httpHosts) {
-			result.push(`http://${host}/`);
+		for (let [scheme, hosts] of schemes) {
+			for (let host of hosts) {
+				result.push(`${scheme}://${host}/`);
+			}
 		}
 
 		return result.join(' ');
@@ -75,8 +77,7 @@ const whitelist = (function () {
 })();
 
 const { startup, shutdown } = (function () {
-	const XUL_NS =
-		'http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul';
+	const XUL_NS = 'http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul';
 
 	const { nsIContentPolicy, nsIFactory } = Components.interfaces;
 
@@ -88,7 +89,10 @@ const { startup, shutdown } = (function () {
 		Components.classes['@mozilla.org/categorymanager;1']
 			.getService(Components.interfaces.nsICategoryManager);
 
-	const preferences = Services.prefs.getBranch('extensions.descript.');
+	const scriptPreferences = Services.prefs.getBranch('javascript.');
+	const extensionPreferences = Services.prefs.getBranch('extensions.descript.');
+
+	let scriptsInitiallyEnabled;
 
 	function hostOnlyFor(uri) {
 		const hostOnly = uri.clone();
@@ -137,7 +141,7 @@ const { startup, shutdown } = (function () {
 		function whitelistAction(action, uri) {
 			return function () {
 				action.call(whitelist, uri);
-				preferences.setCharPref('whitelist', whitelist.getPreference());
+				extensionPreferences.setCharPref('whitelist', whitelist.getPreference());
 			};
 		}
 
@@ -161,17 +165,11 @@ const { startup, shutdown } = (function () {
 				if (whitelist.allows(uri)) {
 					let button = addActionButton(`Remove ${hostSpec}${isMenu ? '' : ' from whitelist'}`);
 					button.classList.add('descript-whitelist-remove');
-					button.addEventListener(
-						'command',
-						whitelistAction(whitelist.remove, uri)
-					);
+					button.addEventListener('command', whitelistAction(whitelist.remove, uri));
 				} else {
 					let button = addActionButton(`Add ${hostSpec}${isMenu ? '' : ' to whitelist'}`);
 					button.classList.add('descript-whitelist-add');
-					button.addEventListener(
-						'command',
-						whitelistAction(whitelist.add, uri)
-					);
+					button.addEventListener('command', whitelistAction(whitelist.add, uri));
 				}
 
 				currentHosts.add(hostSpec);
@@ -259,24 +257,16 @@ const { startup, shutdown } = (function () {
 		QueryInterface: XPCOMUtils.generateQI([
 			nsIContentPolicy, nsIFactory
 		]),
-		shouldLoad:
-			function shouldLoad(
-				contentType, contentLocation, requestOrigin, context,
-				mimeTypeGuess, extra, requestPrincipal
-			) {
-				if (contentType === nsIContentPolicy.TYPE_SCRIPT && !whitelist.allows(contentLocation)) {
-					return nsIContentPolicy.REJECT_SERVER;
-				}
+		shouldLoad: function shouldLoad(type, uri) {
+			if (type === nsIContentPolicy.TYPE_SCRIPT && !whitelist.allows(uri)) {
+				return nsIContentPolicy.REJECT_SERVER;
+			}
 
-				return nsIContentPolicy.ACCEPT;
-			},
-		shouldProcess:
-			function shouldProcess(
-				contentType, contentLocation, requestOrigin, context,
-				mimeType, extra, requestPrincipal
-			) {
-				return nsIContentPolicy.ACCEPT;
-			},
+			return nsIContentPolicy.ACCEPT;
+		},
+		shouldProcess: function shouldProcess() {
+			return nsIContentPolicy.ACCEPT;
+		},
 		createInstance: function createInstance(outer, iid) {
 			if (outer) {
 				throw Components.results.NS_ERROR_NO_AGGREGATION;
@@ -290,7 +280,12 @@ const { startup, shutdown } = (function () {
 		Services.prefs
 			.getDefaultBranch('extensions.descript.')
 			.setCharPref('whitelist', '');
-		whitelist.loadPreference(preferences.getCharPref('whitelist'));
+
+		domainPolicy = Services.scriptSecurityManager.activateDomainPolicy();
+		whitelist.loadPreference(extensionPreferences.getCharPref('whitelist'));
+
+		scriptsInitiallyEnabled = scriptPreferences.getBoolPref('enabled');
+		scriptPreferences.setBoolPref('enabled', false);
 
 		componentRegistrar.registerFactory(
 			contentPolicy.classID,
@@ -312,6 +307,10 @@ const { startup, shutdown } = (function () {
 	}
 
 	function shutdown() {
+		if (!domainPolicy) {
+			return;
+		}
+
 		categoryManager.deleteCategoryEntry(
 			'content-policy',
 			contentPolicy.contractID,
@@ -322,6 +321,9 @@ const { startup, shutdown } = (function () {
 			contentPolicy.classID,
 			contentPolicy
 		);
+
+		scriptPreferences.setBoolPref('enabled', scriptsInitiallyEnabled);
+		domainPolicy.deactivate();
 
 		Services.ww.unregisterNotification(windowObserver);
 		eachWindow(removeButton);
