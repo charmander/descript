@@ -24,10 +24,10 @@ function reloadWhitelist() {
 	}
 }
 
-function whitelistAction(uri) {
+function whitelistAction(hostSpec) {
 	return function () {
 		const newWhitelist =
-			whitelist.concat([uri.spec]);
+			whitelist.concat([hostSpec]);
 
 		extensionPreferences.setCharPref(
 			'whitelist',
@@ -36,16 +36,26 @@ function whitelistAction(uri) {
 	};
 }
 
-function blacklistAction(uri) {
+function blacklistAction(hostSpec) {
 	return function () {
 		const newWhitelist =
-			whitelist.filter(existingUri => existingUri !== uri.spec);
+			whitelist.filter(existingUri => existingUri !== hostSpec);
 
 		extensionPreferences.setCharPref(
 			'whitelist',
 			newWhitelist.join(' ')
 		);
 	};
+}
+
+function hostOnlyFor(uri) {
+	const hostOnly = uri.clone();
+	hostOnly.path = '';
+	hostOnly.port = -1;
+	hostOnly.ref = '';
+	hostOnly.userPass = '';
+
+	return hostOnly;
 }
 
 function addButton(window) {
@@ -80,47 +90,61 @@ function addButton(window) {
 		return actionButton;
 	}
 
-	function addToggle(uri) {
-		const mainButton = window.document.getElementById('descript-button');
-		const isMenu = mainButton.getAttribute('cui-areatype') === 'menu-panel';
-
-		if (!uri.schemeIs('http') && !uri.schemeIs('https')) {
-			return;
-		}
-
-		const hostOnly = uri.clone();
-		hostOnly.path = '';
-		hostOnly.port = -1;
-		hostOnly.ref = '';
-		hostOnly.userPass = '';
-
-		if (whitelist.indexOf(hostOnly.spec) === -1) {
-			let button = addActionButton(`Add ${hostOnly.spec}${isMenu ? '' : ' to whitelist'}`);
-			button.classList.add('descript-whitelist-add');
-			button.addEventListener('command', whitelistAction(hostOnly));
-		} else {
-			let button = addActionButton(`Remove ${hostOnly.spec}${isMenu ? '' : ' from whitelist'}`);
-			button.classList.add('descript-whitelist-remove');
-			button.addEventListener('command', blacklistAction(hostOnly));
-		}
-	}
-
 	function updateActions() {
-		const pageUri = window.getBrowser().selectedBrowser.registeredOpenURI;
+		const currentHosts = new Set();
+
+		function addToggle(uri) {
+			const mainButton = window.document.getElementById('descript-button');
+			const isMenu = mainButton.getAttribute('cui-areatype') === 'menu-panel';
+
+			if (!uri.schemeIs('http') && !uri.schemeIs('https')) {
+				return;
+			}
+
+			const hostOnly = hostOnlyFor(uri);
+			const hostSpec = hostOnly.spec;
+
+			if (currentHosts.has(hostSpec)) {
+				return;
+			}
+
+			if (whitelist.indexOf(hostSpec) === -1) {
+				let button = addActionButton(`Add ${hostOnly.spec}${isMenu ? '' : ' to whitelist'}`);
+				button.classList.add('descript-whitelist-add');
+				button.addEventListener('command', whitelistAction(hostSpec));
+			} else {
+				let button = addActionButton(`Remove ${hostOnly.spec}${isMenu ? '' : ' from whitelist'}`);
+				button.classList.add('descript-whitelist-remove');
+				button.addEventListener('command', blacklistAction(hostSpec));
+			}
+
+			currentHosts.add(hostSpec);
+		}
+
+		const page = window.getBrowser().selectedBrowser;
+		const pageUri = page.registeredOpenURI;
 		let child;
 
 		while ((child = panelContent.firstChild)) {
 			panelContent.removeChild(child);
 		}
 
-		if (pageUri) {
-			addToggle(pageUri);
-		}
-
-		if (!panelContent.childNodes.length) {
+		if (!pageUri) {
 			const placeholder = window.document.createElementNS(XUL_NS, 'label');
 			placeholder.setAttribute('value', 'No domains eligible for whitelist.');
 			panelContent.appendChild(placeholder);
+			return;
+		}
+
+		addToggle(pageUri);
+
+		const contentDocument = page.contentWindow.document;
+		const scripts = contentDocument.getElementsByTagName('script');
+
+		for (let script of scripts) {
+			if (script.src) {
+				addToggle(Services.io.newURI(script.src, null, null));
+			}
 		}
 	}
 
