@@ -34,10 +34,9 @@ HTTPS-only whitelist            |   | ✓
 Automatic cookie `Secure` flag  |   | ✓
 HTTPS rewriting                 |   | ✓
 Automatic reloading             |   | ✓
-Additional UI                   |   | ✓
 Bootstrapped extension          | ✓ |
-40 SLOC                         | ✓ |
-26,019 SLOC                     |   | ✓
+Hundreds of lines               | ✓ |
+Tens of thousands of lines      |   | ✓
 
 
   [descript.xpi]: https://github.com/charmander/descript/releases
