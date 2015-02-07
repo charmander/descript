@@ -81,6 +81,9 @@ function addButton(window) {
 	}
 
 	function addToggle(uri) {
+		const mainButton = window.document.getElementById('descript-button');
+		const isMenu = mainButton.getAttribute('cui-areatype') === 'menu-panel';
+
 		if (!uri.schemeIs('http') && !uri.schemeIs('https')) {
 			return;
 		}
@@ -92,11 +95,13 @@ function addButton(window) {
 		hostOnly.userPass = '';
 
 		if (whitelist.indexOf(hostOnly.spec) === -1) {
-			addActionButton(`Add ${hostOnly.spec} to whitelist`)
-				.addEventListener('command', whitelistAction(hostOnly));
+			let button = addActionButton(`Add ${hostOnly.spec}${isMenu ? '' : ' to whitelist'}`);
+			button.classList.add('descript-whitelist-add');
+			button.addEventListener('command', whitelistAction(hostOnly));
 		} else {
-			addActionButton(`Remove ${hostOnly.spec} from whitelist`)
-				.addEventListener('command', blacklistAction(hostOnly));
+			let button = addActionButton(`Remove ${hostOnly.spec}${isMenu ? '' : ' from whitelist'}`);
+			button.classList.add('descript-whitelist-remove');
+			button.addEventListener('command', blacklistAction(hostOnly));
 		}
 	}
 
@@ -123,7 +128,7 @@ function addButton(window) {
 		id: 'descript-button',
 		type: 'view',
 		viewId: 'descript-manage',
-		tooltiptext: 'Manage script whitelist for current page',
+		tooltiptext: 'Manage script whitelist',
 		label: 'Descript',
 		onViewShowing: updateActions,
 	});
