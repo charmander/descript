@@ -1,10 +1,15 @@
 /* exported startup, shutdown, install, uninstall */
-/* globals Services, XPCOMUtils */
 
 'use strict';
 
-Components.utils.import('resource://gre/modules/Services.jsm');
-Components.utils.import('resource://gre/modules/XPCOMUtils.jsm');
+function import_(uri) {
+	const scope = {};
+	Components.utils.import(uri, scope);
+	return scope;
+}
+
+const { Services } = import_('resource://gre/modules/Services.jsm');
+const { XPCOMUtils } = import_('resource://gre/modules/XPCOMUtils.jsm');
 
 function hostOnlyFor(uri) {
 	const hostOnly = uri.clone();
