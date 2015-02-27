@@ -11,6 +11,30 @@ function import_(uri) {
 const { Services } = import_('resource://gre/modules/Services.jsm');
 const { XPCOMUtils } = import_('resource://gre/modules/XPCOMUtils.jsm');
 
+function uniqueBy(items, key) {
+	const existingKeys = new Set();
+	const result = [];
+
+	for (let item of items) {
+		const itemKey = key(item);
+
+		if (!existingKeys.has(itemKey)) {
+			existingKeys.add(itemKey);
+			result.push(item);
+		}
+	}
+
+	return result;
+}
+
+function empty(node) {
+	let child;
+
+	while ((child = node.firstChild)) {
+		node.removeChild(child);
+	}
+}
+
 function hostOnlyFor(uri) {
 	const hostOnly = uri.clone();
 	hostOnly.path = '';
@@ -132,42 +156,25 @@ const { startup, shutdown } = (function () {
 		}
 
 		function updateActions() {
-			const currentHosts = new Set();
-
 			function addToggle(uri) {
 				const mainButton = document.getElementById('descript-button');
 				const isMenu = mainButton.getAttribute('cui-areatype') === 'menu-panel';
 
-				if (!whitelist.matchable(uri)) {
-					return;
-				}
-
-				const hostSpec = hostOnlyFor(uri).spec;
-
-				if (currentHosts.has(hostSpec)) {
-					return;
-				}
-
 				if (whitelist.allows(uri)) {
-					let button = addActionButton(`Remove ${hostSpec}${isMenu ? '' : ' from whitelist'}`);
+					let button = addActionButton(`Remove ${uri.spec}${isMenu ? '' : ' from whitelist'}`);
 					button.classList.add('descript-whitelist-remove');
 					button.addEventListener('command', whitelistAction(whitelist.remove, uri));
 				} else {
-					let button = addActionButton(`Add ${hostSpec}${isMenu ? '' : ' to whitelist'}`);
+					let button = addActionButton(`Add ${uri.spec}${isMenu ? '' : ' to whitelist'}`);
 					button.classList.add('descript-whitelist-add');
 					button.addEventListener('command', whitelistAction(whitelist.add, uri));
 				}
-
-				currentHosts.add(hostSpec);
 			}
 
 			const page = window.getBrowser().selectedBrowser;
 			const pageUri = page.registeredOpenURI;
-			let child;
 
-			while ((child = panelContent.firstChild)) {
-				panelContent.removeChild(child);
-			}
+			empty(panelContent);
 
 			if (!pageUri || !whitelist.matchable(pageUri)) {
 				const placeholder = document.createElementNS(XUL_NS, 'label');
@@ -176,16 +183,19 @@ const { startup, shutdown } = (function () {
 				return;
 			}
 
-			addToggle(pageUri);
-
 			const contentDocument = page.contentWindow.document;
-			const scripts = contentDocument.getElementsByTagName('script');
+			const scripts = Array.from(contentDocument.getElementsByTagName('script'));
+			const scriptUris = scripts
+				.filter(script => script.src)
+				.map(script => Services.io.newURI(script.src, null, null));
+			const uris = [pageUri].concat(scriptUris);
 
-			for (let script of scripts) {
-				if (script.src) {
-					addToggle(Services.io.newURI(script.src, null, null));
-				}
-			}
+			uniqueBy(
+				uris
+					.filter(whitelist.matchable)
+					.map(hostOnlyFor),
+				hostOnly => hostOnly.spec
+			).forEach(addToggle);
 		}
 
 		window.CustomizableUI.createWidget({
