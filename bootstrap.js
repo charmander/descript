@@ -2,14 +2,8 @@
 
 'use strict';
 
-function import_(uri) {
-	const scope = {};
-	Components.utils.import(uri, scope);
-	return scope;
-}
-
-const { Services } = import_('resource://gre/modules/Services.jsm');
-const { XPCOMUtils } = import_('resource://gre/modules/XPCOMUtils.jsm');
+const { Services } = Components.utils.import('resource://gre/modules/Services.jsm', {});
+const { XPCOMUtils } = Components.utils.import('resource://gre/modules/XPCOMUtils.jsm', {});
 
 function uniqueBy(items, key) {
 	const existingKeys = new Set();
@@ -243,7 +237,7 @@ const { startup, shutdown } = (function () {
 			if (topic === 'domwindowopened') {
 				whenLoaded(subject, addButton);
 			}
-		}
+		},
 	};
 
 	const contentPolicy = {
@@ -251,7 +245,8 @@ const { startup, shutdown } = (function () {
 		classID: Components.ID('336169ae-edc5-4a61-871a-16eeb9837bcf'),
 		contractID: '@descript/policy;1',
 		QueryInterface: XPCOMUtils.generateQI([
-			nsIContentPolicy, nsIFactory
+			nsIContentPolicy,
+			nsIFactory,
 		]),
 		shouldLoad: function shouldLoad(type, uri) {
 			if (type === nsIContentPolicy.TYPE_SCRIPT && !whitelist.allows(uri)) {
@@ -269,7 +264,7 @@ const { startup, shutdown } = (function () {
 			}
 
 			return this.QueryInterface(iid);
-		}
+		},
 	};
 
 	function startup() {
